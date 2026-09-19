@@ -1,18 +1,18 @@
-package com.Bank.BankOfNothing.Tables;
+package com.Bank.bankofnothing.entity;
 
+import com.Bank.bankofnothing.enums.TransactionStatus;
+import com.Bank.bankofnothing.enums.TransactionType;
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 
-import static jakarta.persistence.FetchType.LAZY;
-
-@Table(name = "transaction")
+@Table(name = "transactions")
 @Entity
 public class Transaction {
     @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -25,13 +25,14 @@ public class Transaction {
     private BigDecimal amount;
     private String currency;
     @Enumerated(EnumType.STRING)
-    private String type;
+    private TransactionType type;
     @Enumerated(EnumType.STRING)
-    private String status;
+    private TransactionStatus status;
     @Column(unique = true)
     private String idempotencyKey;
     @CreationTimestamp
-    private Instant createAt;
+    @Column(name = "created_at", nullable = false, updatable = false) // Добавьте букву 'd' в "created_at"
+    private Instant createdAt;
 }
 
 

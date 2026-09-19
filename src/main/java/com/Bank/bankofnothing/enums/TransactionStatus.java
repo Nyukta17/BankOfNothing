@@ -1,4 +1,4 @@
-package com.Bank.BankOfNothing.Enum;
+package com.Bank.bankofnothing.enums;
 
 public enum TransactionStatus {
     PENDING,SUCCESS,FAILED

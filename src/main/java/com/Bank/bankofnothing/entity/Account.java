@@ -1,6 +1,6 @@
-package com.Bank.BankOfNothing.Tables;
+package com.Bank.bankofnothing.entity;
 
-import com.Bank.BankOfNothing.Enum.AccountStatus;
+import com.Bank.bankofnothing.enums.AccountStatus;
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
 
@@ -10,7 +10,7 @@ import java.time.Instant;
 @Entity
 public class Account {
     @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)

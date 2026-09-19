@@ -1,0 +1,25 @@
+package com.Bank.bankofnothing.entity;
+
+import jakarta.persistence.*;
+import org.hibernate.annotations.CreationTimestamp;
+
+import java.time.Instant;
+
+@Table(name="refresh_tokens")
+@Entity
+public class RefreshToken {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id",nullable = false)
+    private User user;
+    @Column(unique = true, nullable = false)
+    private String token;
+    @Column(nullable = false)
+    private Instant expiresAt;
+    @CreationTimestamp
+    @Column(name = "created_at",nullable = false,updatable = false)
+    private Instant createdAt;
+}
