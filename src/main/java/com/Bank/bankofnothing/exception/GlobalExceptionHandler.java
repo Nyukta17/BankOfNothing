@@ -1,6 +1,5 @@
 package com.Bank.bankofnothing.exception;
 
-import com.Bank.bankofnothing.exception.EmailAlreadyExistsException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -31,13 +30,20 @@ public class GlobalExceptionHandler {
     }
 
     // Страховочный перехватчик для ВСЕХ остальных непредвиденных ошибок
-    @ExceptionHandler(Exception.class)
+    @ExceptionHandler(InsufficientFundsException.class)
     public ResponseEntity<Map<String, String>> handleAllOtherExceptions(Exception ex) {
         Map<String, String> error = new HashMap<>();
         error.put("error", "Произошла внутренняя ошибка сервера. Попробуйте позже.");
         ex.printStackTrace();
 
         return new ResponseEntity<>(error, HttpStatus.INTERNAL_SERVER_ERROR); // 500
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<Map<String,String>> handleInsufficientFunds(InsufficientFundsException ex){
+        Map<String,String> error = new HashMap<>();
+        error.put("error", ex.getMessage());
+        return new ResponseEntity<>(error,HttpStatus.BAD_REQUEST);
     }
 
 }
