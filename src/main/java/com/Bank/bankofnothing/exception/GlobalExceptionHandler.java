@@ -1,10 +1,6 @@
 package com.Bank.bankofnothing.exception;
 
-<<<<<<< HEAD
-=======
-
 import com.Bank.bankofnothing.dto.ErrorResponse;
->>>>>>> 60345e155da99dc48bae528858e0be91e1dabaff
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -50,13 +46,7 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
     }
 
-<<<<<<< HEAD
-    // Страховочный перехватчик для ВСЕХ остальных непредвиденных ошибок
-    @ExceptionHandler(InsufficientFundsException.class)
-    public ResponseEntity<Map<String, String>> handleAllOtherExceptions(Exception ex) {
-        Map<String, String> error = new HashMap<>();
-        error.put("error", "Произошла внутренняя ошибка сервера. Попробуйте позже.");
-=======
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleAllOtherExeptions(Exception ex){
         ErrorResponse error = new ErrorResponse(
@@ -64,19 +54,8 @@ public class GlobalExceptionHandler {
                 "Произошла непредвиденая ошибка на сервере. Попробуйте позже",
                 Instant.now()
         );
->>>>>>> 60345e155da99dc48bae528858e0be91e1dabaff
         ex.printStackTrace();
         return new ResponseEntity<>(error,HttpStatus.INTERNAL_SERVER_ERROR);
     }
-<<<<<<< HEAD
 
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<Map<String,String>> handleInsufficientFunds(InsufficientFundsException ex){
-        Map<String,String> error = new HashMap<>();
-        error.put("error", ex.getMessage());
-        return new ResponseEntity<>(error,HttpStatus.BAD_REQUEST);
-    }
-
-=======
->>>>>>> 60345e155da99dc48bae528858e0be91e1dabaff
 }
