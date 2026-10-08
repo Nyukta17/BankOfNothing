@@ -104,7 +104,7 @@ class UserAndTransactionIntegrationTest extends BaseIntegrationTest {
         transferReq.setFromAccountId(fromAccountId);
         transferReq.setToAccountId(toAccountId);
         transferReq.setAmount(new BigDecimal("2500.00"));
-
+        transferReq.setIdempotencyKey(java.util.UUID.randomUUID().toString());
         TransactionResponse transferResp = restClient.post()
                 .uri("/api/transactions/transfer")
                 .headers(headers -> headers.setBearerAuth(token))

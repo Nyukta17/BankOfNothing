@@ -63,5 +63,22 @@ public class GlobalExceptionHandler {
         ex.printStackTrace();
         return new ResponseEntity<>(error,HttpStatus.INTERNAL_SERVER_ERROR);
     }
-
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+    public ResponseEntity<com.Bank.bankofnothing.dto.ErrorResponse> handleDataIntegrityViolation(org.springframework.dao.DataIntegrityViolationException ex){
+        com.Bank.bankofnothing.dto.ErrorResponse error = new ErrorResponse(
+                "DUPLICATE_REQUEST",
+                "Запрос с таким Idempotency-Key уже был обработан системой.",
+                java.time.Instant.now()
+        );
+        return new ResponseEntity<>(error, HttpStatus.CONFLICT);
+    };
+    @ExceptionHandler(LimitExceededException.class)
+    public ResponseEntity<com.Bank.bankofnothing.dto.ErrorResponse>  handleLimitExceeded(LimitExceededException ex){
+        com.Bank.bankofnothing.dto.ErrorResponse error = new com.Bank.bankofnothing.dto.ErrorResponse(
+                "LIMIT_EXCEEDED",
+                ex.getMessage(),
+                java.time.Instant.now()
+        );
+        return new ResponseEntity<>(error, org.springframework.http.HttpStatus.BAD_REQUEST);
+    }
 }

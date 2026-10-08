@@ -1,6 +1,5 @@
 package com.Bank.bankofnothing.security;
 
-import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
@@ -12,13 +11,13 @@ import java.util.Date;
 public class JwtCore {
     private final Key key = Keys.secretKeyFor(SignatureAlgorithm.HS256);
 
-    private final long lifetime=86400000;
+    private final long accessTokenLifetime=900000;
 
-    public  String generateToken(String username){
+    public  String generateAccessToken(String username){
         return Jwts.builder()
                 .setSubject(username)
                 .setIssuedAt(new Date())
-                .setExpiration(new Date((new Date()).getTime() + lifetime))
+                .setExpiration(new Date((new Date()).getTime() + accessTokenLifetime))
                 .signWith(key)
                 .compact();
     };

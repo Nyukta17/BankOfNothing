@@ -51,6 +51,10 @@ class TransactionServiceTest {
         when(authentication.getName()).thenReturn("test@bank.com");
         SecurityContext securityContext = mock(SecurityContext.class);
         when(securityContext.getAuthentication()).thenReturn(authentication);
+        // Найдите в обоих методах класса TransactionServiceTest строку с getDailyTurnover и замените на эту:
+        when(transactionRepository.getDailyTurnover(eq(10L), any(java.time.Instant.class), any()))
+                .thenReturn(BigDecimal.ZERO);
+
         SecurityContextHolder.setContext(securityContext);
 
         currentUser = new User();

@@ -16,6 +16,9 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.UUID;
 
 @Service
@@ -24,6 +27,7 @@ public class TransactionService {
     private final TransactionRepository transactionRepository;
     private final AccountRepository accountRepository;
     private final UserRepository userRepository;
+    private static final BigDecimal DAILY_LIMIT = new BigDecimal("50000.00");
 
     public TransactionService(TransactionRepository transactionRepository,
                               AccountRepository accountRepository,
@@ -55,6 +59,25 @@ public class TransactionService {
             throw new RuntimeException("Вы не можете списывать деньги с чужого счета");
         }
 
+        Instant oneDayAgo = Instant.now().minus(1, java.time.temporal.ChronoUnit.DAYS);
+        // Запрашиваем из БД сумму уже отправленных денег за сутки
+        BigDecimal dailyTurnover = transactionRepository.getDailyTurnover(
+                fromAccount.getId(),
+                oneDayAgo,
+                com.Bank.bankofnothing.enums.TransactionStatus.SUCCESS // Передаем статус явно
+        );
+        if (dailyTurnover == null) {
+            dailyTurnover = BigDecimal.ZERO;
+        }
+        // Считаем, сколько будет, если мы выполним этот перевод
+        BigDecimal totalWithCurrentTransfer = dailyTurnover.add(request.getAmount());
+
+        if (totalWithCurrentTransfer.compareTo(DAILY_LIMIT) > 0) {
+            throw new com.Bank.bankofnothing.exception.LimitExceededException(
+                    "Превышен суточный лимит переводов. Доступный остаток лимита: " + DAILY_LIMIT.subtract(dailyTurnover) + " RUB"
+            );
+        }
+
         // 3. Проверяем равенство валют (упрощение для учебного банка)
         if (!fromAccount.getCurrency().equals(toAccount.getCurrency())) {
             throw new RuntimeException("Переводы возможны только между счетами в одинаковой валюте");
@@ -82,7 +105,7 @@ public class TransactionService {
         transaction.setType(TransactionType.TRANSFER);
         transaction.setStatus(TransactionStatus.SUCCESS);
         // Генерируем уникальный ключ идемпотентности, чтобы избежать дубликатов в БД
-        transaction.setIdempotencyKey(UUID.randomUUID().toString());
+        transaction.setIdempotencyKey(request.getIdempotencyKey());
 
         Transaction savedTx = transactionRepository.save(transaction);
         return mapToResponse(savedTx);
