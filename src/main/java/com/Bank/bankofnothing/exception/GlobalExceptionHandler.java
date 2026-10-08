@@ -1,13 +1,12 @@
 package com.Bank.bankofnothing.exception;
 
-<<<<<<< HEAD
 
 
 import com.Bank.bankofnothing.dto.ErrorResponse;
 
-=======
+
 import com.Bank.bankofnothing.dto.ErrorResponse;
->>>>>>> 6814ef4b85025decefa624a664c98a44af11fa84
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -53,10 +52,6 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
     }
 
-<<<<<<< HEAD
-=======
-
->>>>>>> 6814ef4b85025decefa624a664c98a44af11fa84
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleAllOtherExceptions(Exception ex){
         ErrorResponse error = new ErrorResponse(
@@ -64,10 +59,7 @@ public class GlobalExceptionHandler {
                 "Произошла непредвиденая ошибка на сервере. Попробуйте позже",
                 Instant.now()
         );
-<<<<<<< HEAD
 
-=======
->>>>>>> 6814ef4b85025decefa624a664c98a44af11fa84
         ex.printStackTrace();
         return new ResponseEntity<>(error,HttpStatus.INTERNAL_SERVER_ERROR);
     }

@@ -1,4 +1,4 @@
-package com.Bank.bankofnothing.service;
+package com.Bank.bankofnothing;
 
 import com.Bank.bankofnothing.dto.TransferRequest;
 import com.Bank.bankofnothing.dto.TransactionResponse;
@@ -8,6 +8,7 @@ import com.Bank.bankofnothing.exception.InsufficientFundsException;
 import com.Bank.bankofnothing.repository.AccountRepository;
 import com.Bank.bankofnothing.repository.TransactionRepository;
 import com.Bank.bankofnothing.repository.UserRepository;
+import com.Bank.bankofnothing.service.TransactionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

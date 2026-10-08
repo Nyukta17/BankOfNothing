@@ -12,16 +12,19 @@ import com.Bank.bankofnothing.entity.Account;
 import com.Bank.bankofnothing.repository.AccountRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTestClient;
+import org.springframework.test.web.servlet.client.RestTestClient;
 
-import org.springframework.boot.resttestclient.TestRestTemplate;
-import org.springframework.http.*;
 import java.math.BigDecimal;
 import static org.junit.jupiter.api.Assertions.*;
 
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@AutoConfigureRestTestClient // Включает автоконфигурацию бина RestTestClient
 class UserAndTransactionIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
-    private TestRestTemplate restTemplate;
+    private RestTestClient restClient; // Внедряем корректный бин для Spring Boot 4
 
     @Autowired
     private AccountRepository accountRepository;
@@ -34,47 +37,64 @@ class UserAndTransactionIntegrationTest extends BaseIntegrationTest {
         registerReq.setPassword("password123");
         registerReq.setFullName("Integration User");
 
-        ResponseEntity<UserResponse> regResponse = restTemplate.postForEntity(
-                "/api/users/register", registerReq, UserResponse.class
-        );
-        assertEquals(HttpStatus.CREATED, regResponse.getStatusCode());
-        assertNotNull(regResponse.getBody());
-        assertEquals("integration@test.com", regResponse.getBody().getEmail());
+        UserResponse regResponseBody = restClient.post()
+                .uri("/api/users/register")
+                .body(registerReq)
+                .exchange()
+                .expectStatus().isCreated() // Автоматическая проверка HttpStatus.CREATED (201)
+                .expectBody(UserResponse.class)
+                .returnResult().getResponseBody();
+
+        assertNotNull(regResponseBody);
+        assertEquals("integration@test.com", regResponseBody.getEmail());
 
         // 2. Тест авторизации (Получение токена)
         LoginRequest loginReq = new LoginRequest();
         loginReq.setEmail("integration@test.com");
         loginReq.setPassword("password123");
 
-        ResponseEntity<JwtResponse> loginResponse = restTemplate.postForEntity(
-                "/api/auth/login", loginReq, JwtResponse.class
-        );
-        assertEquals(HttpStatus.OK, loginResponse.getStatusCode());
-        String token = loginResponse.getBody().getToken();
+        JwtResponse loginResponseBody = restClient.post()
+                .uri("/api/auth/login")
+                .body(loginReq)
+                .exchange()
+                .expectStatus().isOk() // Автоматическая проверка HttpStatus.OK (200)
+                .expectBody(JwtResponse.class)
+                .returnResult().getResponseBody();
+
+        assertNotNull(loginResponseBody);
+        String token = loginResponseBody.getToken();
         assertNotNull(token);
 
-        // Настраиваем заголовки с Bearer токеном для защищенных запросов
-        HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth(token);
-        headers.setContentType(MediaType.APPLICATION_JSON);
-
-        // 3. Тест создания счета
+        // 3. Тест создания первого счета (с Bearer авторизацией)
         AccountRequest accountReq = new AccountRequest();
         accountReq.setCurrency("RUB");
-        HttpEntity<AccountRequest> accountEntity = new HttpEntity<>(accountReq, headers);
 
-        ResponseEntity<AccountResponse> account1Resp = restTemplate.postForEntity(
-                "/api/accounts", accountEntity, AccountResponse.class
-        );
-        assertEquals(HttpStatus.CREATED, account1Resp.getStatusCode());
-        Long fromAccountId = account1Resp.getBody().getId();
+        AccountResponse account1Resp = restClient.post()
+                .uri("/api/accounts")
+                .headers(headers -> headers.setBearerAuth(token)) // Установка токена напрямую
+                .body(accountReq)
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody(AccountResponse.class)
+                .returnResult().getResponseBody();
 
-        ResponseEntity<AccountResponse> account2Resp = restTemplate.postForEntity(
-                "/api/accounts", accountEntity, AccountResponse.class
-        );
-        Long toAccountId = account2Resp.getBody().getId();
+        assertNotNull(account1Resp);
+        Long fromAccountId = account1Resp.getId();
 
-        // 4. Имитируем пополнение счета через репозиторий (начисляем баланс в реальную тест-БД)
+        // Тест создания второго счета
+        AccountResponse account2Resp = restClient.post()
+                .uri("/api/accounts")
+                .headers(headers -> headers.setBearerAuth(token))
+                .body(accountReq)
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody(AccountResponse.class)
+                .returnResult().getResponseBody();
+
+        assertNotNull(account2Resp);
+        Long toAccountId = account2Resp.getId();
+
+        // 4. Имитируем пополнение счета через репозиторий
         Account fromAccount = accountRepository.findById(fromAccountId).orElseThrow();
         fromAccount.setBalance(new BigDecimal("10000.00"));
         accountRepository.save(fromAccount);
@@ -84,20 +104,23 @@ class UserAndTransactionIntegrationTest extends BaseIntegrationTest {
         transferReq.setFromAccountId(fromAccountId);
         transferReq.setToAccountId(toAccountId);
         transferReq.setAmount(new BigDecimal("2500.00"));
-        HttpEntity<TransferRequest> transferEntity = new HttpEntity<>(transferReq, headers);
 
-        ResponseEntity<TransactionResponse> transferResp = restTemplate.postForEntity(
-                "/api/transactions/transfer", transferEntity, TransactionResponse.class
-        );
+        TransactionResponse transferResp = restClient.post()
+                .uri("/api/transactions/transfer")
+                .headers(headers -> headers.setBearerAuth(token))
+                .body(transferReq)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(TransactionResponse.class)
+                .returnResult().getResponseBody();
 
-        assertEquals(HttpStatus.OK, transferResp.getStatusCode());
-        assertNotNull(transferResp.getBody());
-        assertEquals("SUCCESS", transferResp.getBody().getStatus());
+        assertNotNull(transferResp);
+        assertEquals("SUCCESS", transferResp.getStatus());
 
         // 6. Проверяем финальные балансы в базе данных
         Account finalFrom = accountRepository.findById(fromAccountId).orElseThrow();
         Account finalTo = accountRepository.findById(toAccountId).orElseThrow();
-        assertEquals(new BigDecimal("7500.00"), finalFrom.getBalance());
-        assertEquals(new BigDecimal("2500.00"), finalTo.getBalance());
+        assertEquals(0, new BigDecimal("7500.00").compareTo(finalFrom.getBalance()));
+        assertEquals(0, new BigDecimal("2500.00").compareTo(finalTo.getBalance()));
     }
 }
