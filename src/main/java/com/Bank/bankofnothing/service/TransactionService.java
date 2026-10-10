@@ -11,6 +11,7 @@ import com.Bank.bankofnothing.repository.AccountRepository;
 import com.Bank.bankofnothing.repository.TransactionRepository;
 import com.Bank.bankofnothing.repository.UserRepository;
 import com.Bank.bankofnothing.exception.InsufficientFundsException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -19,9 +20,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.UUID;
+
 
 @Service
+@Slf4j
 public class TransactionService {
 
     private final TransactionRepository transactionRepository;
@@ -73,6 +75,8 @@ public class TransactionService {
         BigDecimal totalWithCurrentTransfer = dailyTurnover.add(request.getAmount());
 
         if (totalWithCurrentTransfer.compareTo(DAILY_LIMIT) > 0) {
+            log.warn("Перевод заблокирован: превышен дневной лимит на счете {}. Текущий оборот: {}",
+                    fromAccount.getId(), dailyTurnover);
             throw new com.Bank.bankofnothing.exception.LimitExceededException(
                     "Превышен суточный лимит переводов. Доступный остаток лимита: " + DAILY_LIMIT.subtract(dailyTurnover) + " RUB"
             );
@@ -108,6 +112,8 @@ public class TransactionService {
         transaction.setIdempotencyKey(request.getIdempotencyKey());
 
         Transaction savedTx = transactionRepository.save(transaction);
+        log.info("Перевод с {} на {} успешно завершен. ID транзакции: {}",
+                fromAccount.getId(), toAccount.getId(), savedTx.getId());
         return mapToResponse(savedTx);
     }
 
