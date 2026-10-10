@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  shop-db:
+    image: postgres:16-alpine
+    container_name: shop_postgres_container
+    environment:
+      POSTGRES_DB: shop_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432" # Пробрасываем внутренний порт 5432 контейнера на внешний порт 5433 хоста
+    volumes:
+      - shop_db_data:/var/lib/postgresql/data
+
+volumes:
+  shop_db_data:
