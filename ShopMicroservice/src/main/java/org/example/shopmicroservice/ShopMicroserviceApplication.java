@@ -1,4 +1,4 @@
-package org.example.shopmiroservice;
+package org.example.shopmicroservice;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
