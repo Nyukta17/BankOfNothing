@@ -10,7 +10,7 @@ import java.util.Optional;
 public interface AccountRepository extends JpaRepository<Account, Long> {
 
     // Поиск всех счетов конкретного пользователя
-    List<Account> findByUserId(Long userId);
+    Optional<Account> findByUserId(Long userId);
 
     // Поиск конкретного счета с проверкой, что он принадлежит именно этому пользователю
     Optional<Account> findByIdAndUserId(Long id, Long userId);
