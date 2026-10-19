@@ -3,11 +3,13 @@ package com.Bank.bankofnothing.service;
 import com.Bank.bankofnothing.dto.TransferRequest;
 import com.Bank.bankofnothing.dto.TransactionResponse;
 import com.Bank.bankofnothing.entity.Account;
+import com.Bank.bankofnothing.entity.PendingOperation;
 import com.Bank.bankofnothing.entity.Transaction;
 import com.Bank.bankofnothing.enums.TransactionStatus;
 import com.Bank.bankofnothing.enums.TransactionType;
 import com.Bank.bankofnothing.entity.User;
 import com.Bank.bankofnothing.repository.AccountRepository;
+import com.Bank.bankofnothing.repository.PendingOperationRepository;
 import com.Bank.bankofnothing.repository.TransactionRepository;
 import com.Bank.bankofnothing.repository.UserRepository;
 import com.Bank.bankofnothing.exception.InsufficientFundsException;
@@ -20,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 
 
 @Service
@@ -29,20 +32,70 @@ public class TransactionService {
     private final TransactionRepository transactionRepository;
     private final AccountRepository accountRepository;
     private final UserRepository userRepository;
+    private final PendingOperationRepository pendingOperationRepository;
     private static final BigDecimal DAILY_LIMIT = new BigDecimal("50000.00");
 
     public TransactionService(TransactionRepository transactionRepository,
                               AccountRepository accountRepository,
-                              UserRepository userRepository) {
+                              UserRepository userRepository,
+                              PendingOperationRepository pendingOperationRepository) {
         this.transactionRepository = transactionRepository;
         this.accountRepository = accountRepository;
         this.userRepository = userRepository;
+        this.pendingOperationRepository = pendingOperationRepository;
     }
 
     private User getCurrentUser() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+    }
+    @Transactional
+    public void holdFunds(Long accountId, BigDecimal amount, String idempotencyKey) {
+        // 1. Проверяем идемпотентность (не создавали ли мы уже этот hold?)
+        if (pendingOperationRepository.findByIdempotencyKey(idempotencyKey).isPresent()) {
+            return; // Запрос уже обработан успешно
+        }
+
+        // 2. Находим счет пользователя и проверяем баланс
+        Account account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new IllegalArgumentException("Банковский счет не найден"));
+
+        if (account.getBalance().compareTo(amount) < 0) {
+            throw new IllegalStateException("Недостаточно средств для резервирования операции");
+        }
+
+        // 3. Замораживаем средства на балансе аккаунта
+        account.setBalance(account.getBalance().subtract(amount));
+        accountRepository.save(account);
+
+        // 4. Записываем операцию в таблицу pending_operations с TTL (например, на 5 минут)
+        PendingOperation holdOp = new PendingOperation();
+        holdOp.setAccountId(accountId);
+        holdOp.setAmount(amount);
+        holdOp.setIdempotencyKey(idempotencyKey);
+        holdOp.setStatus("HOLD");
+        holdOp.setExpiresAt(Instant.now().plus(5, ChronoUnit.MINUTES)); // TTL 5 минут
+
+        pendingOperationRepository.save(holdOp);
+    }
+    @Transactional
+    public void captureFunds(String idempotencyKey) {
+        PendingOperation holdOp = pendingOperationRepository.findByIdempotencyKey(idempotencyKey)
+                .orElseThrow(() -> new IllegalArgumentException("Операция резервирования не найдена"));
+
+        if ("CAPTURED".equals(holdOp.getStatus())) {
+            return; // Средства уже были окончательно списаны
+        }
+
+        if (!"HOLD".equals(holdOp.getStatus())) {
+            throw new IllegalStateException("Невозможно завершить операцию: текущий статус " + holdOp.getStatus());
+        }
+
+        // При CAPTURE деньги уже списаны с баланса на шаге holdFunds,
+        // поэтому мы просто переводим статус операции в финальный
+        holdOp.setStatus("CAPTURED");
+        pendingOperationRepository.save(holdOp);
     }
 
     @Transactional
