@@ -44,6 +44,11 @@ public class TransactionService {
         this.userRepository = userRepository;
         this.pendingOperationRepository = pendingOperationRepository;
     }
+    @Transactional
+    public TransactionResponse makeDeposit(){
+        return null;
+
+    }
 
     private User getCurrentUser() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();

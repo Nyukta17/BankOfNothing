@@ -23,7 +23,6 @@ public class UserService {
     @Transactional
     public UserResponse register(RegisterRequest request){
         log.info("Начало регистрации пользователя с email: {}",request.getEmail());
-
         if (userRepository.existsByEmail(request.getEmail())) {
             log.warn("Ошибка регистрации: email {} уже занят", request.getEmail());
             throw new EmailAlreadyExistsException("Этот email уже зарегистрирован в системе!"); // Исправлено

@@ -44,6 +44,12 @@ public class TransactionController {
     public ResponseEntity<TransactionResponse> transfer(@Valid @RequestBody TransferRequest request) {
         return ResponseEntity.ok(transactionService.transfer(request));
     }
+    @PostMapping("/deposit")
+    public ResponseEntity<TransactionResponse> deposit() {
+        // Безопасно передаем email пользователя из токена и данные запроса (accountId, amount)
+        TransactionResponse response = transactionService.makeDeposit();
+        return ResponseEntity.ok(response);
+    }
 
     // Получить историю транзакций по счету с пагинацией
     @GetMapping

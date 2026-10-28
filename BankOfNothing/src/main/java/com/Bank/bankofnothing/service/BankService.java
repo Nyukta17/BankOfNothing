@@ -19,25 +19,24 @@ public class BankService {
     private final ShopClient shopClient;
 
     @Transactional
-    public OrderResponse buyFromShop(Long userId, BigDecimal amount, List<ItemDto> items) {
-        // 1. Находим счет пользователя внутри монолита
-        Account account = accountRepository.findByUserId(userId)
-                .orElseThrow(() -> new IllegalArgumentException("Счет не найден"));
+    public OrderResponse buyFromShop(Long userId, BigDecimal amount, String currency, List<ItemDto> items) {
+        // 1. Получаем ВСЕ счета пользователя
+        List<Account> accounts = accountRepository.findByUserId(userId);
 
-        // 2. Списываем деньги
+        // 2. Ищем счет именно в той валюте, которую требует магазин
+        Account account = accounts.stream()
+                .filter(acc -> acc.getCurrency().equalsIgnoreCase(currency)) // Ищем точное совпадение (например, "USD")
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Счет в валюте " + currency + " не найден"));
+
+        // 3. Списываем деньги
         if (account.getBalance().compareTo(amount) < 0) {
-            throw new IllegalStateException("Недостаточно средств на банковском счете");
+            throw new IllegalStateException("Недостаточно средств на счете в валюте " + currency);
         }
         account.setBalance(account.getBalance().subtract(amount));
         accountRepository.save(account);
 
-        // Транзакция банка еще НЕ зафиксирована в БД (commit не произошел),
-        // но мы уже делаем сетевой запрос наружу!
-
-        // 3. Вызываем микросервис магазина по синхронному REST
-        OrderResponse response = shopClient.sendOrderToShop(userId, items);
-
-
-        return response;
+        // 4. Вызываем микросервис магазина
+        return shopClient.sendOrderToShop(userId, items);
     }
 }
