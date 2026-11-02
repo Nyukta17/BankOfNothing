@@ -11,11 +11,11 @@ export type PageTransactionResponse = {
     size?: number;
     content?: Array<TransactionResponse>;
     number?: number;
+    first?: boolean;
+    last?: boolean;
     numberOfElements?: number;
     pageable?: PageableObject;
     sort?: SortObject;
-    first?: boolean;
-    last?: boolean;
     empty?: boolean;
 };
 

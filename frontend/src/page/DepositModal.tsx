@@ -35,6 +35,7 @@ export default function DepositModal({ isOpen, onClose, accounts, onDepositSubmi
     if (!isOpen) return null;
 
     const handleDemoFaucet = async () => {
+        console.log(accounts)
         if (!toAccId) {
             setError("Выберите счет для начисления");
             return;
@@ -44,11 +45,10 @@ export default function DepositModal({ isOpen, onClose, accounts, onDepositSubmi
         setError("");
 
         try {
-            
             const requestData: TransferRequest = {
-                fromAccountId: 0, // Условность: 0 — это системный кран банка
+                fromAccountId: 0,
                 toAccountId: Number(toAccId),
-                amount: 50000, // Фиксированная сумма демо-пополнения
+                amount: Math.floor(Math.random()*50000)+20000,
                 idempotencyKey: crypto.randomUUID()
             };
 
@@ -190,6 +190,7 @@ export default function DepositModal({ isOpen, onClose, accounts, onDepositSubmi
                     <button
                         type="submit"
                         disabled={isLoading}
+                        onClick={handleSubmit}
                         className="w-full mt-2 py-3 px-4 text-sm font-semibold rounded-xl text-white bg-blue-600 hover:bg-blue-700 dark:bg-zinc-50 dark:text-black dark:hover:bg-zinc-200 shadow-md transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
                     >
                         {isLoading ? (

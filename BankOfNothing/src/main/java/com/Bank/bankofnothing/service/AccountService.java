@@ -7,9 +7,14 @@ import com.Bank.bankofnothing.enums.AccountStatus;
 import com.Bank.bankofnothing.entity.User;
 import com.Bank.bankofnothing.repository.AccountRepository;
 import com.Bank.bankofnothing.repository.UserRepository;
+import com.Bank.bankofnothing.security.AccountNumberGenerator;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -19,10 +24,12 @@ public class AccountService {
 
     private final AccountRepository accountRepository;
     private final UserRepository userRepository;
+    private final AccountNumberGenerator accountNumberGenerator;
 
-    public AccountService(AccountRepository accountRepository, UserRepository userRepository) {
+    public AccountService(AccountRepository accountRepository, UserRepository userRepository, AccountNumberGenerator accountNumberGenerator) {
         this.accountRepository = accountRepository;
         this.userRepository = userRepository;
+        this.accountNumberGenerator = accountNumberGenerator;
     }
 
     // Хелпер-метод для получения текущего пользователя из SecurityContext
@@ -35,16 +42,28 @@ public class AccountService {
     @Transactional
     public AccountResponse createAccount(AccountRequest request) {
         User currentUser = getCurrentUser();
+        String currency = request.getCurrency().toUpperCase();
+
+        if (accountRepository.existsByUserIdAndCurrency(currentUser.getId(), currency)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Счёт в этой валюте уже существует");
+        }
 
         Account account = new Account();
         account.setUser(currentUser);
-        account.setBalance(BigDecimal.ZERO); // Баланс при создании = 0
-        account.setCurrency(request.getCurrency().toUpperCase());
-        account.setStatus(AccountStatus.ACTIVE); // Используем наш Enum
-        account.setVersion(0L); // Начальная версия для оптимистичной блокировки
+        account.setNumber(accountNumberGenerator.generate());
+        account.setBalance(BigDecimal.ZERO);
+        account.setCurrency(currency);
+        account.setStatus(AccountStatus.ACTIVE);
 
-        Account savedAccount = accountRepository.save(account);
-        return mapToResponse(savedAccount);
+        try {
+            return mapToResponse(accountRepository.save(account));
+        } catch (DataIntegrityViolationException e) {
+            String msg = e.getMostSpecificCause().getMessage();
+            if (msg != null && msg.contains("uk_accounts_user_currency")) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Счёт в этой валюте уже существует");
+            }
+            throw e;
+        }
     }
 
     @Transactional(readOnly = true)

@@ -13,14 +13,24 @@ public class JwtCore {
 
     private final long accessTokenLifetime=900000;
 
-    public  String generateAccessToken(String username){
+    public  String generateAccessToken(String username,Long id){
         return Jwts.builder()
                 .setSubject(username)
+                .claim("id",id)
                 .setIssuedAt(new Date())
                 .setExpiration(new Date((new Date()).getTime() + accessTokenLifetime))
                 .signWith(key)
                 .compact();
     };
+
+    public Long getIdFromToken(String token){
+        return Jwts.parserBuilder()
+                .setSigningKey(key)
+                .build()
+                .parseClaimsJws(token)
+                .getBody()
+                .get("id", Long.class);
+    }
 
     public String getUsernameFromToken(String token){
         return  Jwts.parserBuilder()

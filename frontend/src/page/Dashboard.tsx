@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "../context/ThemeProvider";
 import { Sun, Moon, LogOut, Plus, Send, DollarSign, TrendingUp, ArrowUpRight, ArrowDownLeft, Loader2 } from "lucide-react";
-import { AccountControllerService, AuthControllerService, OpenAPI, type AccountResponse } from "../api";
+import { AccountControllerService, AuthControllerService, OpenAPI, TransactionControllerService, type AccountResponse, type TransactionResponse, type TransferByNumberRequest, type TransferRequest } from "../api";
+import TransferModal, { type SimpleTransferRequest } from "../page/Transfer";
 import CreateAccountModal from "./CreateAccountModal";
 import DepositModal from "./DepositModal";
 
@@ -23,8 +24,8 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDepositOpen, setIsDepositOpen] = useState(false);
-
   const [selectedCurrencyIndex, setSelectedCurrencyIndex] = useState(0);
+  const [isTransferOpen, setIsTransferOpen] = useState(false);
 
 
 
@@ -38,25 +39,65 @@ export default function Dashboard() {
       .finally(() => { setIsLoading(false) })
 
   }, [])
-  // Группировка и подсчет баланса отдельно для каждой валюты
+  // Группировка и подсчет баланса отдельно balanceдля каждой валюты
   const balancesByCurrency = useMemo(() => {
     if (!accounts || accounts.length === 0) return [];
 
-    // Собираем суммы по ключу валюты: { RUB: 100, USD: 50 }
-    const grouped = accounts.reduce((acc, account) => {
+    // 1. Группируем и суммируем балансы по валютам
+    const grouped = accounts.reduce<Record<string, number>>((acc, account) => {
       const cur = (account.currency || "RUB").toUpperCase();
-      acc[cur] = (acc[cur] || 0) + (account.balance || 0);
-      return acc;
-    }, {} as Record<string, number>);
+      const balanceNum = Number(account.balance) || 0;
 
-    // Превращаем объект в массив для удобного рендеринга
-    return Object.entries(grouped).map(([currency, total]) => ({
-      currency,
-      displayTotal: `${total.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${currency === "RUB" ? "₽" : currency === "USD" ? "$" : currency === "EUR" ? "€" : currency
-        }`
-    }));
+      acc[cur] = (acc[cur] || 0) + balanceNum;
+      return acc;
+    }, {});
+
+    // 2. Форматируем вывод с использованием Intl.NumberFormat
+    return Object.entries(grouped).map(([currency, total]) => {
+      let displayTotal = "";
+
+      try {
+        displayTotal = total.toLocaleString("ru-RU", {
+          style: "currency",
+          currency: currency,
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
+      } catch (e) {
+        // Фолбек на случай, если пришла экзотическая/невалидная валюта
+        displayTotal = `${total.toLocaleString("ru-RU", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })} ${currency}`;
+      }
+
+      return {
+        currency,
+        displayTotal,
+      };
+    });
   }, [accounts]);
-  const handleDepositSubmit = async () => {}
+
+
+
+  const loadAccounts = () => {
+    setIsLoading(true);
+
+    // Делаем GET запрос на бэк для получения счетов текущего юзера
+    return AccountControllerService.getAll()
+      .then((date) => { setAccount(date); })
+      .catch((err) => { setError(err.message || "Не удалось загрузить данные") })
+      .finally(() => { setIsLoading(false) })
+
+  };
+
+  const handleDepositSubmit = async (requestData: TransferRequest) => {
+    TransactionControllerService.transfer(requestData)
+      .then((response) => { loadAccounts })
+      .catch((err) => {
+        console.log("Ошибка: " + err.message);
+      });
+  }
 
 
   const handleAction = (act: string) => {
@@ -70,7 +111,7 @@ export default function Dashboard() {
         setIsDepositOpen(true);
         break;
       case "Перевести":
-        navigate("/transfer");
+        setIsTransferOpen(true);
         break;
 
       case "Обмен":
@@ -85,6 +126,48 @@ export default function Dashboard() {
         alert(`Операция: ${act}`);
     }
   };
+  const handleTransferSubmit = async (requestData: TransferByNumberRequest): Promise<void> => {
+  console.log(requestData);
+
+  return TransactionControllerService.transferByAccountNumber(requestData)
+    .then(() => {
+      // Успех: обновляем список счетов, чтобы балансы на экране изменились
+      return loadAccounts();
+    })
+    .catch((err: any) => {
+      // Достаем сообщение об ошибке из ответа бэка
+      const errorMessage =
+        err?.body?.message ||   // твой ErrorResponse
+        err?.message ||         // стандартная ошибка fetch/openapi
+        "Ошибка при выполнении перевода";
+
+      // Пробрасываем наверх, чтобы TransferModal показала это в блоке error
+      throw new Error(errorMessage);
+    });
+};
+  const handleGetDemoFunds = () => {
+    // Вытаскиваем только ID из объектов счетов и фильтруем от undefined
+    const ids: number[] = accounts.map(a => a.id).filter((id): id is number => id !== undefined);
+
+    if (ids.length === 0) {
+      alert("У вас нет открытых счетов!");
+      return;
+    }
+
+    setIsLoading(true);
+
+    // ПРАВИЛЬНО: Передаем объект DemoFundsRequest напрямую аргументом
+    TransactionControllerService.demoTopup({
+      accountIds: ids
+    })
+      .then(() => {
+        alert("Все счета успешно пополнены случайными суммами!");
+        loadAccounts(); // Перерисовываем интерфейс с новыми балансами
+      })
+      .catch((err: any) => alert("Ошибка: " + err.message))
+      .finally(() => setIsLoading(false));
+  };
+
   const logout = () => {
     AuthControllerService.logout()
       .catch((err) => { console.error("ошибка при logout:", err) })
@@ -169,6 +252,13 @@ export default function Dashboard() {
                 <Plus className="h-3 w-3" /> Новый
               </button>
             </div>
+            <button
+              onClick={handleGetDemoFunds}
+              disabled={isLoading}
+              className="px-3 py-1.5 text-xs font-bold text-blue-600 bg-blue-500/10 hover:bg-blue-500/20 rounded-xl transition-all"
+            >
+              {isLoading ? "Зачисление..." : "⚙️ Получить демо-баланс"}
+            </button>
 
             {/* КРИТИЧЕСКИЙ КУСОЧЕК: Проверяем, есть ли счета */}
             {accounts.length === 0 ? (
@@ -184,34 +274,54 @@ export default function Dashboard() {
               </div>
             ) : (
               /* Если счета есть — запускаем наш стандартный перебор массивов */
-              accounts.map((acc) => (
-                <div key={acc.id} className="nothing-card">
-                  <div className="flex justify-between items-start w-full">
-                    <div>
-                      {/* Отображаем трехбуквенный код валюты (например, RUB, USD) */}
-                      <h3 className="font-bold text-sm tracking-wider uppercase">
-                        Счет {acc.currency || "RUB"}
-                      </h3>
-                      {/* Отображаем статус счета (например, ACTIVE, BLOCKED) */}
-                      <p className="text-[10px] uppercase tracking-wide opacity-50 mt-0.5">
-                        Статус: {acc.status || "ACTIVE"}
-                      </p>
+              accounts.map((acc) => {
+                // 1. Принудительно превращаем баланс в число и подставляем 0, если там null/undefined/строка
+                const balanceNum = Number(acc.balance) || 0;
+                const currencyCode = (acc.currency || "RUB").toUpperCase();
+
+                // 2. Красиво форматируем баланс с правильным знаком валюты
+                let formattedBalance = "";
+                try {
+                  formattedBalance = balanceNum.toLocaleString("ru-RU", {
+                    style: "currency",
+                    currency: currencyCode,
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  });
+                } catch (e) {
+                  // Фолбек для экзотических валют, которые не поддерживает Intl
+                  formattedBalance = `${balanceNum.toLocaleString("ru-RU", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })} ${currencyCode}`;
+                }
+
+                return (
+                  <div key={acc.id} className="nothing-card">
+                    <div className="flex justify-between items-start w-full">
+                      <div>
+                        <h3 className="font-bold text-sm tracking-wider uppercase">
+                          Счет {currencyCode}
+                        </h3>
+                        <p className="text-[10px] uppercase tracking-wide opacity-50 mt-0.5">
+                          Статус: {acc.status || "ACTIVE"}
+                        </p>
+                      </div>
+
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-current/10 font-medium opacity-60">
+                        #{acc.id?.toString().slice(0, 4) || "0000"}
+                      </span>
                     </div>
 
-                    {/* В правом углу оставляем аккуратную плашку с ID или валютой */}
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-current/10 font-medium opacity-60">
-                      #{acc.id?.toString().slice(0, 4) || "0000"}
-                    </span>
+                    {/* 3. Выводим уже полностью готовую и отформатированную строку */}
+                    <p className="text-xl font-extrabold tracking-tight">
+                      {formattedBalance}
+                    </p>
                   </div>
-
-                  {/* Основной баланс: форматируем число и подставляем символ или код валюты */}
-                  <p className="text-xl font-extrabold tracking-tight">
-                    {acc.balance !== undefined ? acc.balance.toLocaleString() : "0.00"}{" "}
-                    {acc.currency === "RUB" ? "₽" : acc.currency === "USD" ? "$" : acc.currency || "₽"}
-                  </p>
-                </div>
-              ))
+                );
+              })
             )}
+
           </div>
 
 
@@ -270,13 +380,20 @@ export default function Dashboard() {
           console.log("Список счетов обновлен");
         }}
       />
-      
+
       {isDepositOpen && <DepositModal
         isOpen={isDepositOpen}
         onClose={() => setIsDepositOpen(false)}
         accounts={accounts} // Передаем живой массив счетов с бэка
         onDepositSubmit={handleDepositSubmit}
       />}
+      <TransferModal
+        isOpen={isTransferOpen}
+        onClose={() => setIsTransferOpen(false)}
+        userAccounts={accounts}
+        onTransferSubmit={handleTransferSubmit}
+      />
+
 
 
     </div>

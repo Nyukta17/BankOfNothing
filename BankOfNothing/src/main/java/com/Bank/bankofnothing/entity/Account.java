@@ -9,7 +9,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.math.BigDecimal;
 import java.time.Instant;
 
-@Table(name = "accounts")
+@Table(name = "accounts", uniqueConstraints = @UniqueConstraint(name = "uk_accounts_user_currency", columnNames = {"user_id", "currency"}))
 @Entity
 @Getter
 @Setter
@@ -20,6 +20,9 @@ public class Account {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
+
+    @Column(nullable = false,unique = true, length = 20)
+    private String number;
 
     @Column(precision = 19, scale = 2, nullable = false)
     private BigDecimal balance;

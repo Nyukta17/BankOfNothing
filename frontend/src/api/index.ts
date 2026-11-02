@@ -10,6 +10,7 @@ export type { OpenAPIConfig } from './core/OpenAPI';
 export type { AccountRequest } from './models/AccountRequest';
 export type { AccountResponse } from './models/AccountResponse';
 export type { CaptureRequest } from './models/CaptureRequest';
+export type { DemoFundsRequest } from './models/DemoFundsRequest';
 export type { HoldRequest } from './models/HoldRequest';
 export type { JwtResponse } from './models/JwtResponse';
 export type { LoginRequest } from './models/LoginRequest';
@@ -19,6 +20,7 @@ export type { RegisterRequest } from './models/RegisterRequest';
 export type { SortObject } from './models/SortObject';
 export type { TokenRefreshRequest } from './models/TokenRefreshRequest';
 export type { TransactionResponse } from './models/TransactionResponse';
+export type { TransferByNumberRequest } from './models/TransferByNumberRequest';
 export type { TransferRequest } from './models/TransferRequest';
 export type { UserResponse } from './models/UserResponse';
 

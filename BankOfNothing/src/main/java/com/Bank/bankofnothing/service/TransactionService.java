@@ -1,13 +1,17 @@
 package com.Bank.bankofnothing.service;
 
+import com.Bank.bankofnothing.dto.AccountRequest;
+import com.Bank.bankofnothing.dto.TransferByNumberRequest;
 import com.Bank.bankofnothing.dto.TransferRequest;
 import com.Bank.bankofnothing.dto.TransactionResponse;
 import com.Bank.bankofnothing.entity.Account;
 import com.Bank.bankofnothing.entity.PendingOperation;
 import com.Bank.bankofnothing.entity.Transaction;
+import com.Bank.bankofnothing.enums.AccountStatus;
 import com.Bank.bankofnothing.enums.TransactionStatus;
 import com.Bank.bankofnothing.enums.TransactionType;
 import com.Bank.bankofnothing.entity.User;
+import com.Bank.bankofnothing.exception.LimitExceededException;
 import com.Bank.bankofnothing.repository.AccountRepository;
 import com.Bank.bankofnothing.repository.PendingOperationRepository;
 import com.Bank.bankofnothing.repository.TransactionRepository;
@@ -16,13 +20,17 @@ import com.Bank.bankofnothing.exception.InsufficientFundsException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
+import java.io.Console;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 
 
 @Service
@@ -45,10 +53,17 @@ public class TransactionService {
         this.pendingOperationRepository = pendingOperationRepository;
     }
     @Transactional
-    public TransactionResponse makeDeposit(){
-        return null;
+    public void injectDemoFunds(List<Long> accountIds) {
+        if (accountIds == null || accountIds.isEmpty()) {
+            throw new IllegalArgumentException("Список счетов пуст");
+        }
 
+        int updatedRows = accountRepository.injectDemoFundsRaw(accountIds);
+
+        log.info("Успешно начислен рандомный баланс на {} счетов", updatedRows);
     }
+
+
 
     private User getCurrentUser() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
@@ -172,6 +187,86 @@ public class TransactionService {
         Transaction savedTx = transactionRepository.save(transaction);
         log.info("Перевод с {} на {} успешно завершен. ID транзакции: {}",
                 fromAccount.getId(), toAccount.getId(), savedTx.getId());
+        return mapToResponse(savedTx);
+    }
+    @Transactional
+    public TransactionResponse transferByAccountNumber(TransferByNumberRequest request) {
+        User currentUser = getCurrentUser();
+
+        // 1. Загружаем счет списания
+        Account fromAccount = accountRepository.findById(request.getFromAccountId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Счет списания не найден"));
+
+        // 2. Проверяем, что счет списания принадлежит текущему юзеру
+        if (!fromAccount.getUser().getId().equals(currentUser.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Вы не можете списывать деньги с чужого счета");
+        }
+
+        // 3. Ищем счет получателя по номеру (20 цифр)
+        Account toAccount = accountRepository.findByNumber(request.getToAccountNumber())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Счет получателя не найден"));
+
+        // 4. Проверяем, не пытается ли юзер перевести сам себе на тот же счет
+        if (fromAccount.getId().equals(toAccount.getId())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Нельзя перевести деньги на тот же счет");
+        }
+
+        // 5. Проверка статуса счетов (не заблокированы ли)
+        if (fromAccount.getStatus() != AccountStatus.ACTIVE) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Счет списания заблокирован");
+        }
+        if (toAccount.getStatus() != AccountStatus.ACTIVE) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Счет получателя заблокирован");
+        }
+
+        // 6. Проверка валюты
+        if (!fromAccount.getCurrency().equals(toAccount.getCurrency())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Переводы возможны только между счетами в одинаковой валюте");
+        }
+
+        // 7. Проверка достаточности баланса
+        if (fromAccount.getBalance().compareTo(request.getAmount()) < 0) {
+            throw new InsufficientFundsException("Недостаточно средств на счете");
+        }
+
+        // 8. Проверка дневного лимита (твоя логика)
+        Instant oneDayAgo = Instant.now().minus(1, ChronoUnit.DAYS);
+        BigDecimal dailyTurnover = transactionRepository.getDailyTurnover(
+                fromAccount.getId(),
+                oneDayAgo,
+                TransactionStatus.SUCCESS
+        );
+        if (dailyTurnover == null) dailyTurnover = BigDecimal.ZERO;
+
+        BigDecimal totalWithCurrentTransfer = dailyTurnover.add(request.getAmount());
+        if (totalWithCurrentTransfer.compareTo(DAILY_LIMIT) > 0) {
+            log.warn("Перевод заблокирован: превышен дневной лимит на счете {}.", fromAccount.getId());
+            throw new LimitExceededException(
+                    "Превышен суточный лимит переводов. Доступный остаток лимита: " + DAILY_LIMIT.subtract(dailyTurnover) + " " + fromAccount.getCurrency()
+            );
+        }
+
+        // 9. Выполняем перевод
+        fromAccount.setBalance(fromAccount.getBalance().subtract(request.getAmount()));
+        toAccount.setBalance(toAccount.getBalance().add(request.getAmount()));
+
+        accountRepository.save(fromAccount);
+        accountRepository.save(toAccount);
+
+        // 10. Фиксируем транзакцию
+        Transaction transaction = new Transaction();
+        transaction.setFromAccount(fromAccount);
+        transaction.setToAccount(toAccount);
+        transaction.setAmount(request.getAmount());
+        transaction.setCurrency(fromAccount.getCurrency());
+        transaction.setType(TransactionType.TRANSFER);
+        transaction.setStatus(TransactionStatus.SUCCESS);
+        transaction.setIdempotencyKey(request.getIdempotencyKey());
+
+        Transaction savedTx = transactionRepository.save(transaction);
+        log.info("Перевод по номеру счета {} на {} успешно завершен. ID транзакции: {}",
+                fromAccount.getNumber(), toAccount.getNumber(), savedTx.getId());
+
         return mapToResponse(savedTx);
     }
 

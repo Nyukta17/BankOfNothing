@@ -43,7 +43,7 @@ public class AuthService {
         }
 
         // 3. Если всё ок — генерируем токен
-        String accessToken = jwtCore.generateAccessToken(user.getEmail());
+        String accessToken = jwtCore.generateAccessToken(user.getEmail(),user.getId());
 
         // 4. Возвращаем DTO с токеном и email
         refreshTokenRepository.deleteByUserId(user.getId());
@@ -75,7 +75,7 @@ public class AuthService {
         }
         User user = tokenInDb.getUser();
 
-        String newAccessToken = jwtCore.generateAccessToken(user.getEmail());
+        String newAccessToken = jwtCore.generateAccessToken(user.getEmail(), user.getId());
 
         refreshTokenRepository.delete(tokenInDb);
 
